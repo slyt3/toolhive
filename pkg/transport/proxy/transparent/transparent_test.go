@@ -1252,6 +1252,29 @@ func TestTransparentProxy_RemoteServerFailure_ConnectionRefused(t *testing.T) {
 	assert.True(t, proxyStopped, "Proxy should stop after connection failure")
 }
 
+// TestTransparentProxy_RemoteServerFailure_HTTP500 tests that remote servers returning HTTP 500
+// are marked unhealthy even before the proxy sees a successful initialize response.
+func TestTransparentProxy_RemoteServerFailure_HTTP500(t *testing.T) {
+	t.Parallel()
+
+	tracker, callback := newCallbackTracker()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	proxy, ctx, cancel := setupRemoteProxyTest(t, server.URL, callback)
+	defer cancel()
+	defer func() { _ = proxy.Stop(ctx) }()
+
+	// Do not call proxy.setServerInitialized(). Health checks must run before initialization.
+	callbackInvoked, proxyStopped := waitForShutdown(t, tracker, proxy, 2*time.Second)
+
+	assert.True(t, callbackInvoked, "Callback should be invoked when remote server returns HTTP 500 before initialization")
+	assert.True(t, proxyStopped, "Proxy should stop when remote server returns HTTP 500 repeatedly")
+}
+
 // TestTransparentProxy_RemoteServerFailure_Timeout tests that timeouts
 // trigger health check failure
 func TestTransparentProxy_RemoteServerFailure_Timeout(t *testing.T) {

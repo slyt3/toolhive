@@ -1258,13 +1258,16 @@ func (p *TransparentProxy) monitorHealth(parentCtx context.Context) {
 			slog.Debug("shutdown initiated, stopping health monitor", "target", p.targetURI)
 			return
 		case <-ticker.C:
-			if !p.serverInitialized() {
+			// For local container workloads, skip health checks until the MCP server
+			// has completed initialization (i.e. a successful initialize response was
+			// observed). This avoids false-positive unhealthy transitions during slow
+			// container startup. Remote workloads never call setServerInitialized() on
+			// 500 responses, so we always check them regardless of init state.
+			if !p.isRemote && !p.serverInitialized() {
 				//nolint:gosec // G706: logging target URI from config
-				slog.Debug("mcp server not initialized yet, skipping health check",
-					"target", p.targetURI)
+				slog.Debug("mcp server not initialized yet, skipping health check", "target", p.targetURI)
 				continue
 			}
-
 			alive := p.healthChecker.CheckHealth(parentCtx)
 			if alive.Status != healthcheck.StatusHealthy {
 				var shouldContinue bool

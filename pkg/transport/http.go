@@ -10,8 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
-	"strings"
 	"sync"
 
 	"golang.org/x/oauth2"
@@ -207,20 +205,6 @@ func hasTokenExchangeMiddleware(middlewares []types.NamedMiddleware) bool {
 	return false
 }
 
-// shouldEnableHealthCheck determines whether health checks should be enabled based on workload type.
-// For local workloads, health checks are always enabled.
-// For remote workloads, health checks are only enabled if explicitly opted in via the
-// TOOLHIVE_REMOTE_HEALTHCHECKS environment variable (set to "true" or "1").
-func shouldEnableHealthCheck(isRemote bool) bool {
-	if !isRemote {
-		// Always enable health checks for local workloads
-		return true
-	}
-	// For remote workloads, only enable if explicitly opted in via environment variable
-	envVal := os.Getenv("TOOLHIVE_REMOTE_HEALTHCHECKS")
-	return strings.ToLower(envVal) == "true" || envVal == "1"
-}
-
 // Mode returns the transport mode.
 func (t *HTTPTransport) Mode() types.TransportType {
 	return t.transportType
@@ -325,9 +309,6 @@ func (t *HTTPTransport) Start(ctx context.Context) error {
 		})
 	}
 
-	// Determine whether to enable health checks based on workload type
-	enableHealthCheck := shouldEnableHealthCheck(isRemote)
-
 	// Build proxy options
 	proxyOptions := t.buildProxyOptions(remoteBasePath, remoteRawQuery)
 
@@ -339,7 +320,7 @@ func (t *HTTPTransport) Start(ctx context.Context) error {
 		t.prometheusHandler,
 		t.authInfoHandler,
 		t.prefixHandlers,
-		enableHealthCheck,
+		true,
 		isRemote,
 		string(t.transportType),
 		t.onHealthCheckFailed,
